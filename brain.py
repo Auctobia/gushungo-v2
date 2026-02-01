@@ -69,12 +69,13 @@ def home():
     return "Gushungo AI is Online"
 
 @app.route('/get-signal')
-def get_signal():
-    return jsonify(current_signal)
+# --- THE CLOUD STARTER ---
+def start_ai():
+    asyncio.run(deriv_ai_engine())
 
-# --- STARTING THE BRAIN ---
-# This part starts the background AI engine automatically on Render
-Thread(target=lambda: asyncio.run(deriv_ai_engine()), daemon=True).start()
+# This starts the AI immediately when the file is loaded by Render
+ai_thread = Thread(target=start_ai, daemon=True)
+ai_thread.start()
 
 if __name__ == "__main__":
     # This only runs on your laptop
