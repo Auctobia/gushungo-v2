@@ -19,35 +19,44 @@ current_signal = {
 }
 
 async def deriv_ai_engine():
+   async def deriv_ai_engine():
     global current_signal
-    uri = f"wss://ws.derivws.com/websockets/v3?app_id={APP_ID}"
-    print("--- AI ENGINE ATTEMPTING CONNECTION ---")
+    # Use the 'blue' URL for better cloud compatibility
+    uri = f"wss://ws.binaryws.com/websockets/v3?app_id={APP_ID}"
     
     while True:
         try:
-            async with websockets.connect(uri) as websocket:
-                print("--- CONNECTED TO DERIV ---")
+            print("--- ATTEMPTING CLOUD CONNECTION ---")
+            async with websockets.connect(uri, ping_interval=20, ping_timeout=20) as websocket:
+                # 1. Authorize
                 await websocket.send(json.dumps({"authorize": DERIV_TOKEN}))
+                auth_res = await websocket.recv()
+                print(f"--- AUTH STATUS: {auth_res} ---")
+                
+                # 2. Subscribe to Gold Ticks (Stream mode)
+                await websocket.send(json.dumps({"ticks": "frxXAUUSD", "subscribe": 1}))
                 
                 while True:
-                    # Requesting Gold Ticks
-                    await websocket.send(json.dumps({"ticks": "frxXAUUSD"}))
                     res = await websocket.recv()
                     data = json.loads(res)
                     
                     if 'tick' in data:
                         price = data['tick']['quote']
-                        print(f"--- NEW PRICE RECEIVED: {price} ---")
                         current_signal = {
-                            "asset": "Gold (XAU/USD)",
+                            "asset": "Gold (Cloud AI)",
                             "price": str(price),
                             "signal": "BUY" if random.random() > 0.5 else "SELL",
                             "probability": f"{random.randint(85, 98)}%",
                             "color": "green"
                         }
-                    await asyncio.sleep(2)
+                        print(f"--- PRICE UPDATED: {price} ---")
+                    
+                    # Prevent timeout
+                    await asyncio.sleep(0.1)
+
         except Exception as e:
-            print(f"--- CONNECTION ERROR: {e} ---")
+            print(f"--- ENGINE CRASHED: {e} ---")
+            current_signal["signal"] = "RECONNECTING..."
             await asyncio.sleep(5)
 
 # This starts the AI as soon as the file loads
@@ -65,4 +74,5 @@ def get_signal():
 
 if __name__ == "__main__":
     app.run(host='0.0.0.0', port=10000)
+
 
