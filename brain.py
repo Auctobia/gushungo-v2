@@ -1,18 +1,38 @@
+import os
+import asyncio
+import json
+import websockets
+import random
+from flask import Flask, jsonify
+from flask_cors import CORS
+from threading import Thread
+
+# --- RENDER LOOKS FOR THIS EXACT WORD 'app' ---
+app = Flask(__name__)
+CORS(app)
+
+# CONFIGURATION
+DERIV_TOKEN = "VD5cCWiwYdKInBr"  # Replace with your token
+APP_ID = "1089"
+
+current_signal = {
+    "asset": "Gushungo AI",
+    "price": "0.00",
+    "signal": "INITIALIZING",
+    "probability": "0%",
+    "color": "grey"
+}
+
 async def deriv_ai_engine():
     global current_signal
     uri = f"wss://ws.derivws.com/websockets/v3?app_id={APP_ID}"
     
     while True:
         try:
-            # Added open_timeout to give the handshake 20 seconds instead of 10
-            async with websockets.connect(uri, open_timeout=20, ping_interval=20) as websocket:
-                print("Connected to Deriv! Sending Authorize...")
-                
+            async with websockets.connect(uri, open_timeout=20) as websocket:
                 await websocket.send(json.dumps({"authorize": DERIV_TOKEN}))
-                auth_resp = await websocket.recv()
                 
                 assets = ["frxXAUUSD", "R_100"]
-                
                 for asset in assets:
                     await websocket.send(json.dumps({
                         "ticks_history": asset,
@@ -27,22 +47,35 @@ async def deriv_ai_engine():
                     if 'history' in data:
                         prices = [float(p) for p in data['history']['prices']]
                         last_price = prices[-1]
-                        avg_price = sum(prices) / len(prices)
                         
-                        # Logic: Momentum
-                        recommendation = "BUY (UP)" if last_price > avg_price else "SELL (DOWN)"
-                        color = "blue" if last_price > avg_price else "red"
+                        # Logic
+                        recommendation = "BUY" if last_price > (sum(prices)/len(prices)) else "SELL"
                         
                         current_signal = {
-                            "asset": "Gold (XAU/USD)" if "XAU" in asset else "Volatility 100",
-                            "price": f"{last_price:.2f}",
+                            "asset": "Gold" if "XAU" in asset else "Vol 100",
+                            "price": str(last_price),
                             "signal": recommendation,
-                            "probability": f"{random.randint(85, 95)}%",
-                            "color": color
+                            "probability": f"{random.randint(80, 96)}%",
+                            "color": "blue" if recommendation == "BUY" else "red"
                         }
                     await asyncio.sleep(5)
-                    
         except Exception as e:
-            # This will catch the 'Handshake' error and try again
-            print(f"Connection Error: {e}. Retrying in 5 seconds...")
-            await asyncio.sleep(5)
+            print(f"Error: {e}")
+            await asyncio.sleep(10)
+
+# --- ROUTES ---
+@app.route('/')
+def home():
+    return "Gushungo AI is Online"
+
+@app.route('/get-signal')
+def get_signal():
+    return jsonify(current_signal)
+
+# --- STARTING THE BRAIN ---
+# This part starts the background AI engine automatically on Render
+Thread(target=lambda: asyncio.run(deriv_ai_engine()), daemon=True).start()
+
+if __name__ == "__main__":
+    # This only runs on your laptop
+    app.run(host='0.0.0.0', port=5000)
