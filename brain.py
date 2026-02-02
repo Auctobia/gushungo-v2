@@ -7,7 +7,7 @@ app = Flask(__name__)
 CORS(app)
 
 # CONFIGURATION
-DERIV_TOKEN = "PvBYo3sFOiEVoMz" 
+DERIV_TOKEN = "M5XFFLgLH47qf1g" 
 APP_ID = "1089"
 
 current_signal = {
@@ -60,3 +60,4 @@ def get_signal():
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
     app.run(host='0.0.0.0', port=port)
+
