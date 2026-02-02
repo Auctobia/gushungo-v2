@@ -17,8 +17,7 @@ current_signal = {
     "probability": "0%",
     "color": "grey"
 }
-
-   async def deriv_ai_engine():
+ async def deriv_ai_engine():
     global current_signal
     # Using the standard Binary.com endpoint which is often more stable
     uri = f"wss://ws.binaryws.com/websockets/v3?app_id={APP_ID}"
@@ -83,4 +82,5 @@ def get_signal():
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
     app.run(host='0.0.0.0', port=port)
+
 
