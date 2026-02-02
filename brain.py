@@ -7,7 +7,7 @@ app = Flask(__name__)
 CORS(app)
 
 # CONFIGURATION
-DERIV_TOKEN = "M5XFFLgLH47qf1g" 
+DERIV_TOKEN = "CqwyAwnLmCja1LW" 
 APP_ID = "1089"
 
 current_signal = {
@@ -56,3 +56,4 @@ async def deriv_ai_engine():
             current_signal["signal"] = "CHECK_DERIV_TOKEN"
             current_signal["price"] = "ERROR"
             await asyncio.sleep(5)
+
