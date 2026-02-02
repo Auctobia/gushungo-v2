@@ -21,6 +21,8 @@ current_signal = {
 async def deriv_ai_engine():
     global current_signal
     uri = f"wss://ws.binaryws.com/websockets/v3?app_id={APP_ID}"
+    
+    # Cloud Security Setup
     ssl_context = ssl.create_default_context()
     ssl_context.check_hostname = False
     ssl_context.verify_mode = ssl.CERT_NONE
@@ -28,12 +30,17 @@ async def deriv_ai_engine():
     while True:
         try:
             async with websockets.connect(uri, ssl=ssl_context) as websocket:
+                # Attempt Auth
                 await websocket.send(json.dumps({"authorize": DERIV_TOKEN}))
-                await websocket.recv()
+                res = await websocket.recv()
+                print(f"AUTH_LOG: {res}") # This will show the error in Render Logs
+                
+                # Subscribe to Gold
                 await websocket.send(json.dumps({"ticks": "frxXAUUSD", "subscribe": 1}))
+                
                 while True:
-                    res = await websocket.recv()
-                    data = json.loads(res)
+                    msg = await websocket.recv()
+                    data = json.loads(msg)
                     if 'tick' in data:
                         price = data['tick']['quote']
                         current_signal = {
@@ -44,20 +51,8 @@ async def deriv_ai_engine():
                             "color": "green"
                         }
         except Exception as e:
+            print(f"CONNECTION_ERROR: {e}")
+            # FALLBACK: If Deriv fails, show this so we know the app is alive
+            current_signal["signal"] = "CHECK_DERIV_TOKEN"
+            current_signal["price"] = "ERROR"
             await asyncio.sleep(5)
-
-# Ensure these lines are flush against the left wall (NO SPACES)
-Thread(target=lambda: asyncio.run(deriv_ai_engine()), daemon=True).start()
-
-@app.route('/')
-def home():
-    return "Online"
-
-@app.route('/get-signal')
-def get_signal():
-    return jsonify(current_signal)
-
-if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 10000))
-    app.run(host='0.0.0.0', port=port)
-
