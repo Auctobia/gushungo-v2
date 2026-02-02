@@ -6,13 +6,15 @@ from threading import Thread
 app = Flask(__name__)
 CORS(app)
 
+# --- YOUR SETTINGS ---
+# Make sure your token is inside the quotes!
 DERIV_TOKEN = "CqwyAwnLmCja1LW" 
 APP_ID = "1089"
 
 current_signal = {
     "asset": "Gushungo AI",
     "price": "0.00",
-    "signal": "CONNECTING",
+    "signal": "INITIALIZING...",
     "probability": "0%",
     "color": "grey"
 }
@@ -20,37 +22,58 @@ current_signal = {
 async def deriv_ai_engine():
     global current_signal
     uri = f"wss://ws.binaryws.com/websockets/v3?app_id={APP_ID}"
+    
+    # SSL Fix for Cloud Servers
     ssl_context = ssl.create_default_context()
     ssl_context.check_hostname = False
     ssl_context.verify_mode = ssl.CERT_NONE
+
     while True:
         try:
+            current_signal["signal"] = "ATTEMPTING_CONNECTION"
             async with websockets.connect(uri, ssl=ssl_context) as websocket:
+                
+                # 1. Authorize
                 await websocket.send(json.dumps({"authorize": DERIV_TOKEN}))
-                await websocket.recv()
+                auth_res = await websocket.recv()
+                auth_data = json.loads(auth_res)
+                
+                if 'error' in auth_data:
+                    # SHOW THE ERROR ON THE SCREEN
+                    error_msg = auth_data['error']['code']
+                    current_signal["signal"] = f"ERROR: {error_msg}"
+                    print(f"Auth Error: {error_msg}")
+                    return # Stop trying if token is wrong
+
+                # 2. Subscribe to Gold
                 await websocket.send(json.dumps({"ticks": "frxXAUUSD", "subscribe": 1}))
+                current_signal["signal"] = "WAITING_FOR_TICKS"
+                
                 while True:
                     res = await websocket.recv()
                     data = json.loads(res)
                     if 'tick' in data:
                         price = data['tick']['quote']
-                        current_signal.update({
+                        # SUCCESS!
+                        current_signal = {
+                            "asset": "Gold (Live)",
                             "price": str(price),
                             "signal": "BUY" if random.random() > 0.5 else "SELL",
                             "probability": f"{random.randint(85, 99)}%",
                             "color": "green"
-                        })
-        except:
+                        }
+        except Exception as e:
+            # If it crashes, show why on the screen
+            current_signal["signal"] = f"CRASH: {str(e)[:20]}"
+            print(f"Engine Error: {e}")
             await asyncio.sleep(5)
 
-# Start background engine
+# Start the AI
 Thread(target=lambda: asyncio.run(deriv_ai_engine()), daemon=True).start()
-
-# --- THE ROUTES (To fix 404) ---
 
 @app.route('/')
 def home():
-    return "Gushungo Server is Online"
+    return "Gushungo AI Diagnostic Mode"
 
 @app.route('/get-signal')
 def get_signal():
