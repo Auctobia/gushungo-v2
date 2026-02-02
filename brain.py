@@ -17,6 +17,7 @@ current_signal = {
     "probability": "0%",
     "color": "grey"
 }
+
 async def deriv_ai_engine():
     global current_signal
     uri = f"wss://ws.binaryws.com/websockets/v3?app_id={APP_ID}"
