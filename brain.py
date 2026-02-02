@@ -6,15 +6,17 @@ from threading import Thread
 app = Flask(__name__)
 CORS(app)
 
-# --- YOUR SETTINGS ---
-# Make sure your token is inside the quotes!
+# CONFIGURATION
 DERIV_TOKEN = "CqwyAwnLmCja1LW" 
 APP_ID = "1089"
+
+# Global flag to track if the brain is active
+brain_active = False
 
 current_signal = {
     "asset": "Gushungo AI",
     "price": "0.00",
-    "signal": "INITIALIZING...",
+    "signal": "OFFLINE", # Default state
     "probability": "0%",
     "color": "grey"
 }
@@ -23,38 +25,30 @@ async def deriv_ai_engine():
     global current_signal
     uri = f"wss://ws.binaryws.com/websockets/v3?app_id={APP_ID}"
     
-    # SSL Fix for Cloud Servers
     ssl_context = ssl.create_default_context()
     ssl_context.check_hostname = False
     ssl_context.verify_mode = ssl.CERT_NONE
 
     while True:
         try:
-            current_signal["signal"] = "ATTEMPTING_CONNECTION"
+            current_signal["signal"] = "CONNECTING..."
             async with websockets.connect(uri, ssl=ssl_context) as websocket:
-                
                 # 1. Authorize
                 await websocket.send(json.dumps({"authorize": DERIV_TOKEN}))
-                auth_res = await websocket.recv()
-                auth_data = json.loads(auth_res)
+                auth = await websocket.recv()
                 
-                if 'error' in auth_data:
-                    # SHOW THE ERROR ON THE SCREEN
-                    error_msg = auth_data['error']['code']
-                    current_signal["signal"] = f"ERROR: {error_msg}"
-                    print(f"Auth Error: {error_msg}")
-                    return # Stop trying if token is wrong
+                if "error" in json.loads(auth):
+                    current_signal["signal"] = "INVALID_TOKEN"
+                    return # Stop if token is bad
 
-                # 2. Subscribe to Gold
+                # 2. Subscribe
                 await websocket.send(json.dumps({"ticks": "frxXAUUSD", "subscribe": 1}))
-                current_signal["signal"] = "WAITING_FOR_TICKS"
+                current_signal["signal"] = "WAITING_FOR_DATA"
                 
                 while True:
-                    res = await websocket.recv()
-                    data = json.loads(res)
+                    data = json.loads(await websocket.recv())
                     if 'tick' in data:
                         price = data['tick']['quote']
-                        # SUCCESS!
                         current_signal = {
                             "asset": "Gold (Live)",
                             "price": str(price),
@@ -63,21 +57,29 @@ async def deriv_ai_engine():
                             "color": "green"
                         }
         except Exception as e:
-            # If it crashes, show why on the screen
-            current_signal["signal"] = f"CRASH: {str(e)[:20]}"
-            print(f"Engine Error: {e}")
+            print(f"Error: {e}")
+            current_signal["signal"] = "CONNECTION_LOST"
             await asyncio.sleep(5)
 
-# Start the AI
-Thread(target=lambda: asyncio.run(deriv_ai_engine()), daemon=True).start()
+# --- THE MAGIC TRIGGER ---
+@app.route('/get-signal')
+def get_signal():
+    global brain_active
+    
+    # Check if the brain is sleeping. If yes, WAKE IT UP!
+    if not brain_active:
+        print("--- WAKING UP THE BRAIN ---")
+        t = Thread(target=lambda: asyncio.run(deriv_ai_engine()))
+        t.daemon = True
+        t.start()
+        brain_active = True
+        return jsonify({"message": "Brain is waking up... Refresh in 5 seconds", "signal": "STARTING..."})
+    
+    return jsonify(current_signal)
 
 @app.route('/')
 def home():
-    return "Gushungo AI Diagnostic Mode"
-
-@app.route('/get-signal')
-def get_signal():
-    return jsonify(current_signal)
+    return "Gushungo AI Server"
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
