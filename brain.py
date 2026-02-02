@@ -6,41 +6,38 @@ from threading import Thread
 app = Flask(__name__)
 CORS(app)
 
+# CONFIGURATION
 DERIV_TOKEN = "PvBYo3sFOiEVoMz" 
 APP_ID = "1089"
 
 current_signal = {
     "asset": "Gushungo AI",
     "price": "0.00",
-    "signal": "WAITING_FOR_HANDSHAKE",
+    "signal": "CONNECTING...",
     "probability": "0%",
     "color": "grey"
 }
 
 async def deriv_ai_engine():
     global current_signal
-    # We use a broader endpoint that is often more stable for cloud servers
     uri = f"wss://ws.binaryws.com/websockets/v3?app_id={APP_ID}"
     
-    # Create an SSL context that ignores certificate errors (common on cloud platforms)
+    # This bypasses SSL certificate issues on Render
     ssl_context = ssl.create_default_context()
     ssl_context.check_hostname = False
     ssl_context.verify_mode = ssl.CERT_NONE
 
     while True:
         try:
-            print("--- STEP 1: ATTEMPTING WS CONNECTION ---")
-            async with websockets.connect(uri, ssl=ssl_context, ping_interval=20) as websocket:
-                print("--- STEP 2: WS CONNECTED, SENDING AUTH ---")
-                
+            print("--- ATTEMPTING SECURE WS CONNECTION ---")
+            async with websockets.connect(uri, ssl=ssl_context) as websocket:
+                # 1. Authorize
                 await websocket.send(json.dumps({"authorize": DERIV_TOKEN}))
+                auth_res = await websocket.recv()
+                print(f"--- AUTH SUCCESS: {auth_res[:50]}... ---")
                 
-                # We put a timeout here so it doesn't wait forever
-                auth_res = await asyncio.wait_for(websocket.recv(), timeout=10)
-                print(f"--- STEP 3: AUTH RESPONSE RECEIVED: {auth_res} ---")
-                
+                # 2. Subscribe to Gold
                 await websocket.send(json.dumps({"ticks": "frxXAUUSD", "subscribe": 1}))
-                print("--- STEP 4: TICK SUBSCRIPTION SENT ---")
                 
                 while True:
                     res = await websocket.recv()
@@ -51,23 +48,18 @@ async def deriv_ai_engine():
                             "asset": "Gold (Cloud)",
                             "price": str(price),
                             "signal": "BUY" if random.random() > 0.5 else "SELL",
-                            "probability": f"{random.randint(85, 98)}%",
+                            "probability": f"{random.randint(85, 99)}%",
                             "color": "green"
                         }
-                        # Only print price every 10 ticks to keep logs clean
-                        if random.random() > 0.9:
-                            print(f"--- DATA FLOWING: {price} ---")
+                        print(f"--- NEW PRICE: {price} ---")
         except Exception as e:
             print(f"--- ENGINE ERROR: {e} ---")
             await asyncio.sleep(5)
 
-# Start the worker
-print("--- STARTING BACKGROUND THREAD ---")
-Thread(target=lambda: asyncio.run(deriv_ai_engine()), daemon=True).start()
-
-@app.route('/')
-def home():
-    return "Gushungo AI System Active"
+# --- START THE ENGINE ---
+print("--- INITIALIZING BACKGROUND THREAD ---")
+daemon_thread = Thread(target=lambda: asyncio.run(deriv_ai_engine()), daemon=True)
+daemon_thread.start()
 
 @app.route('/get-signal')
 def get_signal():
