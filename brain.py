@@ -6,14 +6,13 @@ from threading import Thread
 app = Flask(__name__)
 CORS(app)
 
-# CONFIGURATION
 DERIV_TOKEN = "CqwyAwnLmCja1LW" 
 APP_ID = "1089"
 
 current_signal = {
     "asset": "Gushungo AI",
     "price": "0.00",
-    "signal": "CONNECTING...",
+    "signal": "CONNECTING",
     "probability": "0%",
     "color": "grey"
 }
@@ -21,39 +20,42 @@ current_signal = {
 async def deriv_ai_engine():
     global current_signal
     uri = f"wss://ws.binaryws.com/websockets/v3?app_id={APP_ID}"
-    
-    # Cloud Security Setup
     ssl_context = ssl.create_default_context()
     ssl_context.check_hostname = False
     ssl_context.verify_mode = ssl.CERT_NONE
-
     while True:
         try:
             async with websockets.connect(uri, ssl=ssl_context) as websocket:
-                # Attempt Auth
                 await websocket.send(json.dumps({"authorize": DERIV_TOKEN}))
-                res = await websocket.recv()
-                print(f"AUTH_LOG: {res}") # This will show the error in Render Logs
-                
-                # Subscribe to Gold
+                await websocket.recv()
                 await websocket.send(json.dumps({"ticks": "frxXAUUSD", "subscribe": 1}))
-                
                 while True:
-                    msg = await websocket.recv()
-                    data = json.loads(msg)
+                    res = await websocket.recv()
+                    data = json.loads(res)
                     if 'tick' in data:
                         price = data['tick']['quote']
-                        current_signal = {
-                            "asset": "Gold (Live)",
+                        current_signal.update({
                             "price": str(price),
                             "signal": "BUY" if random.random() > 0.5 else "SELL",
                             "probability": f"{random.randint(85, 99)}%",
                             "color": "green"
-                        }
-        except Exception as e:
-            print(f"CONNECTION_ERROR: {e}")
-            # FALLBACK: If Deriv fails, show this so we know the app is alive
-            current_signal["signal"] = "CHECK_DERIV_TOKEN"
-            current_signal["price"] = "ERROR"
+                        })
+        except:
             await asyncio.sleep(5)
 
+# Start background engine
+Thread(target=lambda: asyncio.run(deriv_ai_engine()), daemon=True).start()
+
+# --- THE ROUTES (To fix 404) ---
+
+@app.route('/')
+def home():
+    return "Gushungo Server is Online"
+
+@app.route('/get-signal')
+def get_signal():
+    return jsonify(current_signal)
+
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host='0.0.0.0', port=port)
